@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ReferenceGroup xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="4b49f2d6-41a9-40e5-b630-e6ef32326cbe" xmlns="urn:schemas-microsoft-com:xml-wcfservicemap">
+  <ClientOptions>
+    <GenerateAsynchronousMethods>true</GenerateAsynchronousMethods>
+    <EnableDataBinding>true</EnableDataBinding>
+    <ExcludedTypes />
+    <ImportXmlTypes>false</ImportXmlTypes>
+    <GenerateInternalTypes>false</GenerateInternalTypes>
+    <GenerateMessageContracts>false</GenerateMessageContracts>
+    <NamespaceMappings />
+    <CollectionMappings />
+    <GenerateSerializableTypes>true</GenerateSerializableTypes>
+    <Serializer>Auto</Serializer>
+    <UseSerializerForFaults>true</UseSerializerForFaults>
+    <ReferenceAllAssemblies>true</ReferenceAllAssemblies>
+    <ReferencedAssemblies />
+    <ReferencedDataContractTypes />
+    <ServiceContractMappings />
+  </ClientOptions>
+  <MetadataSources>
+    <MetadataSource Address="net.tcp://localhost:9000/BriefMakerService/mex" Protocol="mex" SourceId="1" />
+  </MetadataSources>
+  <Metadata>
+    <MetadataFile FileName="Microsoft.ServiceModel.Samples.wsdl" MetadataType="Wsdl" ID="f2ac9467-0626-4c27-8a83-1ba182ecb9f2" SourceId="1" SourceUrl="net.tcp://localhost:9000/BriefMakerService/mex" />
+    <MetadataFile FileName="service.wsdl" MetadataType="Wsdl" ID="60a1aa6b-330c-454e-aae5-b43fe6a6d249" SourceId="1" SourceUrl="net.tcp://localhost:9000/BriefMakerService/mex" />
+    <MetadataFile FileName="Microsoft.ServiceModel.Samples.xsd" MetadataType="Schema" ID="8d4c12d4-a856-4176-9064-2b9a68a71581" SourceId="1" SourceUrl="net.tcp://localhost:9000/BriefMakerService/mex" />
+    <MetadataFile FileName="service.xsd" MetadataType="Schema" ID="098b7fb8-e473-4fe6-b5ed-51716726930d" SourceId="1" SourceUrl="net.tcp://localhost:9000/BriefMakerService/mex" />
+  </Metadata>
+  <Extensions>
+    <ExtensionFile FileName="configuration91.svcinfo" Name="configuration91.svcinfo" />
+    <ExtensionFile FileName="configuration.svcinfo" Name="configuration.svcinfo" />
+  </Extensions>
+</ReferenceGroup>

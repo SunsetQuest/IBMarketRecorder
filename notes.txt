@@ -1,0 +1,3 @@
+make sure the DLLs are updated everywhere even in the BIN and OBJ folders
+make sure you try it without the firewall
+if you get the splash screen error make sure to either remove comando firewall or start with:"C:\Program Files\Java\jre1.6.0_07\bin\javaws.exe" -Xnosplash "http://www.interactivebrokers.com/java/classes/edemo.jnlp"
