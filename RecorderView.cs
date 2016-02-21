@@ -1,6 +1,9 @@
 ﻿// Market Recorder for Interactive Brokers
 // This projected is licensed under the terms of the MIT license.
-// Copyright (c) 2013, 2014, 2015, 2016 Ryan S. White
+// This projected is licensed under the terms of the MIT license.
+// NO WARRANTY. THE SOFTWARE IS PROVIDED TO YOU “AS IS” AND “WITH ALL FAULTS.”
+// ANY USE OF THE SOFTWARE IS ENTIRELY AT YOUR OWN RISK.
+// Copyright (c) 2003 - 2016 Ryan S. White
 
 using System;
 using System.Collections.Generic;
@@ -67,7 +70,7 @@ namespace Capture
             }
             catch (Exception ex)
             {
-                logger.Error("Error creating DispatcherTimer: ", ex);
+                logger.Error("Error creating DispatcherTimer: " + ex.Message);
             }
 
             logger.Info("Configuring Recorder BackgroundWorker");
@@ -140,8 +143,8 @@ namespace Capture
 
         private void btnLaunchWebDemo_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("http://www.interactivebrokers.com/java/classes/edemo.jnlp"); 
-            // alternative method thats less automated: http://www.interactivebrokers.com/en/software/twsDisclaimer.php?ib_entity=llc&twsdemo=1 
+            System.Diagnostics.Process.Start("https://www.interactivebrokers.com/en/index.php?f=16052&ns=T&twsdemo=1");
+            // alternative method thats more automated: http://www.interactivebrokers.com/java/classes/edemo.jnlp
         }
 
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)

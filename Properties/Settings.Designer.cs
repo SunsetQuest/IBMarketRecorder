@@ -26,7 +26,7 @@ namespace Capture.Properties {
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.SpecialSettingAttribute(global::System.Configuration.SpecialSetting.ConnectionString)]
-        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=LOCALHOST\\SQLEXPRESS;Initial Catalog=Focus;Integrated Security=True")]
+        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=.;Initial Catalog=Focus;Integrated Security=True")]
         public string FocusConnectionString {
             get {
                 return ((string)(this["FocusConnectionString"]));

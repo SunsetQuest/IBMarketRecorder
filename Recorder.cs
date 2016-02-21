@@ -1,12 +1,14 @@
 ﻿// Market Recorder for Interactive Brokers
 // This projected is licensed under the terms of the MIT license.
-// Copyright (c) 2013, 2014, 2015, 2016 Ryan S. White
+// NO WARRANTY. THE SOFTWARE IS PROVIDED TO YOU “AS IS” AND “WITH ALL FAULTS.”
+// ANY USE OF THE SOFTWARE IS ENTIRELY AT YOUR OWN RISK.
+// Copyright (c) 2003 - 2016 Ryan S. White
 
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.IO;  // for BinaryWriter
+using System.IO;            // for BinaryWriter
 using System.ServiceModel;
 using Krs.Ats.IBNet;
 using System.Text;
@@ -18,26 +20,106 @@ namespace Capture
 {
     public partial class Recorder
     {
-        Properties.Settings settings = Properties.Settings.Default;
         BinaryWriter capturingWriter, manufacturedWriterForFuture;
+        /// <summary>Prevents two threads from accessing the capturingWriter at the same time.</summary>
         object capturingWriterLock = new object();
-        List<Symbol> symbols;
+        /// <summary>Contains a list of stock symbols and indexes that the program will capture.</summary>
+        List<MarketSymbol> symbols = new List<MarketSymbol>();
+        /// <summary>Database uploads will start at this time.</summary>
         TimeSpan START_TIME = new TimeSpan(5, 45, 0);
+        /// <summary>Database uploads will stop at this time.</summary>
         TimeSpan STOP_TIME = new TimeSpan(14, 15, 0);
-        bool isMarketOpen;
-        BriefMakerServiceReference.BriefMakerClient briefMakerClient; // WCF notification to a BriefMaker
+        /// <summary>The starting size for MemoryStreams. (should not have much impact)</summary>
         const int MemoryStreamReserveSpace = 1024;
         DataClasses1DataContext dc = new DataClasses1DataContext();
-        int totalCaptureEventsForDisplay = 0, lastTotalCaptureEventsForDisplay = 0;
+        /// <summary>Displays the number update events to MarketMaker from IB TWS since the app started.</summary>
+        int totalCaptureEventsForDisplay = 0;
+        /// <summary>Used for calculating how many new events have happed in the last second.</summary>
+        int lastTotalCaptureEventsForDisplay = 0;
+        /// <summary>Contains the time when the last streamMoment was pushed to the DB. This is to make sure we do not update duplicate values.</summary>
         DateTime lastPushedTime;
-        private static NLog.Logger logger, loggerWCF; // = NLog.LogManager.GetCurrentClassLogger();
+        /// <summary>Used for capturing all the events.  This is useful for debugging and checking the status. This output to the main window.</summary>
+        private static NLog.Logger logger, loggerWCF;
+        /// <summary>This is the Interactive Brokers API using Krs.Ats.IBNet.</summary>
         private static IBClient client;
+        /// <summary>When set to True this instructs MarketRecorder to close all connections and shutdown.</summary>
         public volatile bool terminateRequested = false;
+        /// <summary>Contains most of the stuff on the main form.</summary>
         RecorderView view;
-        DateTime lastRecievedUpdate;// contains when the last marked data update was received
-        DateTime lastUpdateTime; //contains the last time the 1secTickTimer ran
-        //private System.Windows.Forms.Timer MonitorTimer;
+        /// <summary>Shortcut to Properties.Settings.Default. (aka .config file)</summary>
+        Properties.Settings settings = Properties.Settings.Default;
+        /// <summary>True if the Markets are open. (Holidays also are true.)</summary>
+        bool isMarketOpen;
+        /// <summary>WCF notification to a BriefMaker</summary>
+        BriefMakerServiceReference.BriefMakerClient briefMakerClient;
+        /// <summary>Contains when the last marked data update was received.</summary>
+        DateTime lastRecievedUpdate;
+        /// <summary>Contains the last time the 1secTickTimer ran.</summary>
+        DateTime lastUpdateTime; 
         
+
+        class MarketSymbol
+        {
+            public SecurityType securityType;// = symbols[s].Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index;
+            private string market = "SMART";         
+            private int symbolID;
+            private string symbol;
+
+            /// <summary>
+            /// This is the Symbol ID that will be encoded in the StreamMoment outputs. Valid values are 0-255.
+            /// </summary>
+            public int SymbolID
+            {
+                get
+                {
+                    return symbolID;
+                }
+
+                set
+                {
+                    if (value > 255 || value < 0)
+                        throw new ArgumentOutOfRangeException("SymbolID range must be 0-255.");
+                    symbolID = value;
+                }
+            }
+
+            /// <summary>
+            /// This is the Market where the symbol is located. Defaults to SMART if not specified. (NASDAQ,NYSE,SMART...)
+            /// </summary>
+            public string Market
+            {
+                get
+                {
+                    return market;
+                }
+
+                set
+                {
+                    if (value.Length > 20)
+                        throw new ArgumentOutOfRangeException("Length of Market should be 20 chars or less.");
+
+                    market = string.IsNullOrWhiteSpace(value) ? "SMART" : value.Trim();
+                }
+            }
+
+            /// <summary>
+            /// This is the Symbol of the item to register for events on.  (AMD,MSFT...)
+            /// </summary>           
+            public string Symbol
+            {
+                get
+                {
+                    return symbol;
+                }
+
+                set
+                {
+                    if (value.Length > 12)
+                        throw new ArgumentOutOfRangeException("Symbol of Market should be 12 chars or less.");
+                    symbol = value.Trim();
+                }
+            }
+        }
 
         public Recorder(RecorderView view)
         {
@@ -53,19 +135,44 @@ namespace Capture
 
             /////////// Download Symbols ///////////
             logger.Debug("Downloading symbols");
-            //var symbols = (from symb in dc.Symbols select symb.Name.Trim()).ToList();
-            symbols = (from s in dc.Symbols select s).ToList();
+            var dbSymbols = from s in dc.Symbols select s;
 
-              // Setup BinaryWriters
+            foreach (var s in dbSymbols)
+            {
+                if (String.IsNullOrWhiteSpace(s.Name))
+                {
+                    logger.Error("SymbolID:" + s.SymbolID + " does not have a name(symbol). Item will be skipped.");
+                    continue;
+                }
+                if (s.SymbolID > 255 || s.SymbolID < 0)
+                {
+                    logger.Error("SymbolID:" + s.SymbolID + " range is not valid. Supported(0-255). Item will be skipped.");
+                    continue;
+                }
+
+                SecurityType secType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index;
+                string market = s.Market.Trim(); 
+
+                var new_symb = new MarketSymbol() {
+                    SymbolID = s.SymbolID,
+                    Symbol = s.Name.Trim(),
+                    securityType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index,
+                    Market = s.Market
+                };
+                symbols.Add(new_symb);
+            }
+
+
+            // Setup BinaryWriters
             logger.Debug("Downloading symbols");
             capturingWriter = new BinaryWriter(new MemoryStream(MemoryStreamReserveSpace));
-            capturingWriter.Write((long)0);  //leave some space at the beginning for time later
+            capturingWriter.Write((long)0);  // leave some space at the beginning for time later
             manufacturedWriterForFuture = new BinaryWriter(new MemoryStream(MemoryStreamReserveSpace));
-            manufacturedWriterForFuture.Write((long)0);  //leave some space at the beginning for time later
+            manufacturedWriterForFuture.Write((long)0);  // leave some space at the beginning for time later
 
-
-            Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.High;
-            //Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
+            // Run this thread will a little higher priority since it is dealing with real-time information.
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
+            // Thread.CurrentThread.Priority = ThreadPriority.AboveNormal;
 
             view.timer.Tick += new EventHandler(timer1Sec_Tick);
 
@@ -135,9 +242,8 @@ namespace Capture
                     Thread.Sleep(2000);
                     client.RequestIds(1);
                     Thread.Sleep(2000);
-
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     logger.Info("IB Connecting Exception: " + ex.Message);
                     if (terminateRequested) // changed: 2004-1-28
@@ -167,14 +273,13 @@ namespace Capture
             string listToEcho = "";
             for (int s = 0; s < symbols.Count(); s++)
             {
-                //Warning: axTws1.reqMktData((symbolCt),... <--may need to be 0,1,2,3 and not symbolID
-                //axTws1.reqMktData(curID++, symbols[s], "STK", "", 0, "", "", "SMART", "ISLAND", "USD", "", 0);
-                string name = symbols[s].Name.Trim();
-                SecurityType secType = symbols[s].Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index;
-                string market = symbols[s].Market.Trim(); //(secType==SecurityType.Stock) ? "smart" : symbols[s].Market.Trim();
-                Contract item = new Contract(name, market, secType, "USD");
-                client.RequestMarketData(s, item, null, false, false);
+                string name = symbols[s].Symbol.Trim();
 
+                Contract item = new Contract(name, symbols[s].Market, symbols[s].securityType, "USD");
+                client.RequestMarketData(symbols[s].SymbolID, item, null, false, false);
+
+                // Examples..
+                //axTws1.reqMktData(curID++, symbols[s], "STK", "", 0, "", "", "SMART", "ISLAND", "USD", "", 0);
                 //client.RequestMarketDepth(s, item, 10);
                 //client.RequestContractDetails(s, item);
                 //client.RequestFundamentalData(s, item, "Estimates");
@@ -197,18 +302,18 @@ namespace Capture
         void client_TickPrice(object sender, TickPriceEventArgs e)
         {
             //Console.WriteLine("Price: " + e.Price + " Tick Type: " + EnumDescConverter.GetEnumDescription(e.TickType));
-            DateTime now = System.DateTime.Now;
-            int millisecond = (int)(now.Ticks % (TimeSpan.TicksPerSecond) / (TimeSpan.TicksPerSecond / 256));
+            DateTime now = DateTime.Now;
+            int millisecond = (int)(now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
 
             lock (capturingWriterLock)
             {
-                capturingWriter.Write((byte)millisecond);
-                capturingWriter.Write((byte)e.TickType);
-                capturingWriter.Write((byte)e.TickerId);
-                capturingWriter.Write((float)e.Price);
+                capturingWriter.Write((byte)millisecond); // record sub-second time (1/256th resolution)
+                capturingWriter.Write((byte)e.TickType);  // kind of data (like bid, ask, last...)
+                capturingWriter.Write((byte)e.TickerId);  // The Symbol ID (like AMD, INTC, INDU..)
+                capturingWriter.Write((float)e.Price);    // The data - in this case price.
             }
 
-            logger.Trace("{0} : {1} : {2} : {3}", e.TickType, symbols[e.TickerId].Name, e.TickerId, e.Price);
+            logger.Trace("{0} : {1} : {2} : {3}", e.TickType, symbols[e.TickerId].Symbol, e.TickerId, e.Price);
             totalCaptureEventsForDisplay++;
             lastRecievedUpdate = now;
         }
@@ -216,7 +321,7 @@ namespace Capture
         void client_TickSize(object sender, TickSizeEventArgs e)
         {
             //Console.WriteLine("Tick Size: " + e.Size + " Tick Type: " + EnumDescConverter.GetEnumDescription(e.TickType));
-            int millisecond = (int)(System.DateTime.Now.Ticks % (TimeSpan.TicksPerSecond) / (TimeSpan.TicksPerSecond / 256));
+            int millisecond = (int)(DateTime.Now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
 
             lock (capturingWriterLock)
             {
@@ -226,7 +331,7 @@ namespace Capture
                 capturingWriter.Write((float)e.Size);
             }
             if ((totalCaptureEventsForDisplay & 0x3C) == 0) //only shows the first 4 for every 64
-                logger.Trace("{0} : {1} : {2} : {3}", e.TickType, symbols[e.TickerId].Name, e.TickerId, e.Size);
+                logger.Trace("{0} : {1} : {2} : {3}", e.TickType, symbols[e.TickerId].Symbol, e.TickerId, e.Size);
             totalCaptureEventsForDisplay++;
         }
 
@@ -279,10 +384,9 @@ namespace Capture
 
         //void client_UpdateMarketDepth(object sender, UpdateMarketDepthEventArgs e)
         //{
-        //    //throw new NotImplementedException();
         //    logger.Debug(" TWS Message client_UpdateMarketDepth TickerId={0} Size={1} Price={2} Position={3}", 
         //       e.TickerId, e.Size, e.Price, e.Position);
-
+        //    //throw new NotImplementedException();
         //}
 
 
@@ -297,23 +401,23 @@ namespace Capture
             Update_isMarketClosed(ref time);
 
             // Round down to nearest second
-            DateTime roundedTime = new DateTime((time.Ticks / TimeSpan.TicksPerSecond) * TimeSpan.TicksPerSecond);  
+            time = new DateTime((time.Ticks / TimeSpan.TicksPerSecond) * TimeSpan.TicksPerSecond);  
 
             // Make sure we don't do the same upload twice
-            if (roundedTime == lastPushedTime)
+            if (time == lastPushedTime)
             {
                 logger.Warn("timer1Sec_Tick() detected duplicate roundedTime for {0}, aborting save. "
                     + "This can happen if a previous time1Sec_Tick() took a long time and then several "
-                    + "waiting time1Sec_Tick() execute at once.", roundedTime.ToString("HH:mm:ss.fff"));
+                    + "waiting time1Sec_Tick() execute at once.", time.ToString("HH:mm:ss.fff"));
                 return;
             }
-            lastPushedTime = roundedTime;
+            lastPushedTime = time;
 
             // Set capturing stream to processing stream 
             BinaryWriter ProcWriter = capturingWriter;
             lock (capturingWriterLock) { capturingWriter = manufacturedWriterForFuture; }
 
-            // Finish up processing stream, 
+            // Finish up processing stream
             ProcWriter.BaseStream.Position = 0;
             ProcWriter.Write(time.Ticks);
             ProcWriter.Flush();  //Flushes pending updates (maybe not needed?)
@@ -324,14 +428,14 @@ namespace Capture
             // Upload Brfs to the database
             if (isMarketOpen) 
             {
-                 
                 byte[] data = ((MemoryStream)ProcWriter.BaseStream).ToArray();
 
-                // Round down to nearest second  
-                roundedTime = new DateTime((time.Ticks / TimeSpan.TicksPerSecond) * TimeSpan.TicksPerSecond);
+                // Round down to nearest second
+                long eighthOfSec = TimeSpan.TicksPerSecond / 8;
+                time = new DateTime(((time.Ticks + eighthOfSec) / TimeSpan.TicksPerSecond) * TimeSpan.TicksPerSecond);
 
                 // Save it to the database 
-                submitBrfToDB(roundedTime, data);
+                submitBrfToDB(time, data);
 
                 if (logger.IsTraceEnabled)
                     LogCapturedData(data);
@@ -339,14 +443,14 @@ namespace Capture
                 // Display pushed results
                 logger.Debug("Snapshot complete with {0} bytes for time {1}", data.Length.ToString(), time.ToString("HH:mm:ss.fff"));
 
-                // fixed memory leak issue I think
+                // prevent memory leak issue
                 ProcWriter.BaseStream.Dispose();
                 ProcWriter.Dispose();
             }
 
-            // Setup BinaryWriter for future use - we could of just created this above but it would have taken time before the update
+            // Get next BinaryWriter ready ahead of time. We could of just created this above but it would have taken time before the update
             manufacturedWriterForFuture = new BinaryWriter(new MemoryStream(MemoryStreamReserveSpace));
-            manufacturedWriterForFuture.Write((long)0);  //leave some space at the beginning for time later
+            manufacturedWriterForFuture.Write((long)0);  // Leave some space at the beginning so we can add the exact end time later.
             lastUpdateTime = time;
         }
         
@@ -378,7 +482,7 @@ namespace Capture
                 dc.SubmitChanges();
                 submitSuccess = true;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 logger.Error("Exception with SubmitChanges() (will try again): {0}", ex.Message);
             }
@@ -395,7 +499,7 @@ namespace Capture
                     dc.SubmitChanges();
                     logger.Info("SubmitChanges() okay on second try.");
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     logger.Error("Exception with SubmitChanges() on second try: {0}", ex.Message);
                 }
@@ -418,7 +522,7 @@ namespace Capture
 
                     loggerWCF.Debug("BriefMaker Connection Established");
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     loggerWCF.Debug("Exception when opening connection:(this can be normal)(Calling Abort,Close,recreate next) {0}", ex.Message);
                     //briefMakerClient.Abort();
@@ -436,7 +540,7 @@ namespace Capture
                     briefMakerClient.AddDataStreamMomentUsingWCFAsync(((MemoryStream)ProcWriter.BaseStream).ToArray());
                     loggerWCF.Debug("AddDataStreamMomentUsingWCFAsync() completed");
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     loggerWCF.Debug("Exception when calling AddDataStreamMomentUsingWCFAsync(): " + ex.Message);
                 }
@@ -462,7 +566,7 @@ namespace Capture
         }
 
         ///// <summary>
-        ///// Can be used to make sure the range of values that are received are correct.
+        ///// Can be used to make sure the range of values that are received are valid.
         ///// </summary>
         //string CheckRange(float value, float low, float high, int symbolID, string attribDesc)
         //{
@@ -471,7 +575,6 @@ namespace Capture
         //    else
         //        return "";
         //}
-
 
 
         //////////////////////////////////////////////////////////////////////

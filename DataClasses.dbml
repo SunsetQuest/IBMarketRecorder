@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?><Database Name="Focus" EntityNamespace="Capture" Class="DataClasses1DataContext" xmlns="http://schemas.microsoft.com/linqtosql/dbml/2007">
-  <Connection Mode="AppSettings" ConnectionString="Data Source=LOCALHOST\SQLEXPRESS;Initial Catalog=Focus;Integrated Security=True" SettingsObjectName="Capture.Properties.Settings" SettingsPropertyName="FocusConnectionString" Provider="System.Data.SqlClient" />
+  <Connection Mode="AppSettings" ConnectionString="Data Source=.;Initial Catalog=Focus;Integrated Security=True" SettingsObjectName="Capture.Properties.Settings" SettingsPropertyName="FocusConnectionString" Provider="System.Data.SqlClient" />
   <Table Name="dbo.StreamMoments" Member="StreamMoments">
     <Type Name="StreamMoment">
       <Column Name="SnapshotTime" Type="System.DateTime" DbType="DateTime2 NOT NULL" IsPrimaryKey="true" CanBeNull="false" />

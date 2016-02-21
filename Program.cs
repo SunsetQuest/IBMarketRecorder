@@ -1,6 +1,8 @@
 ﻿// Market Recorder for Interactive Brokers
 // This projected is licensed under the terms of the MIT license.
-// Copyright (c) 2013, 2014, 2015, 2016 Ryan S. White
+// NO WARRANTY. THE SOFTWARE IS PROVIDED TO YOU “AS IS” AND “WITH ALL FAULTS.”
+// ANY USE OF THE SOFTWARE IS ENTIRELY AT YOUR OWN RISK.
+// Copyright (c) 2003 - 2016 Ryan S. White
 
 using System;
 using System.Linq;
@@ -19,19 +21,19 @@ namespace Capture
         {
             for (int i = 0; i < args.Length; i++)
             {
-                string item = args[i].Trim(new Char[] { '/', '-', ' ' }).ToLower(); //.Replace(@"\", "")
+                string item = args[i].Trim(new char[] { '/', '-', ' ' }).ToLower();
                 if (item == "q" || item == "quit")
                 {
-                    var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                    var matchingProcesses = System.Diagnostics.Process.GetProcesses().Where(x => x.Id != currentProcess.Id && x.ProcessName == currentProcess.ProcessName);
+                    var currentProcess = Process.GetCurrentProcess();
+                    var matchingProcesses = Process.GetProcesses().Where(x => x.Id != currentProcess.Id && x.ProcessName == currentProcess.ProcessName);
                     foreach (var process in matchingProcesses)
                         process.CloseMainWindow();
-                    return; // exit this application also
+                    return; // exit this application
                 }
                 if (item == "h" || item == "help")
                 {
                     MessageBox.Show("/q    closes any running instances\n/h    shows this window", "Command Line Parameters");
-                    return; // exit this application also
+                    return; // exit this application
                 }
             }
             
