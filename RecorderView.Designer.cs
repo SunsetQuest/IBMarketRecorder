@@ -58,7 +58,7 @@
             this.btnDeleteAll.Size = new System.Drawing.Size(123, 25);
             this.btnDeleteAll.TabIndex = 21;
             this.btnDeleteAll.Text = "Delete All";
-            this.toolTip1.SetToolTip(this.btnDeleteAll, "This will delete everything from the Briefs table.");
+            this.toolTip1.SetToolTip(this.btnDeleteAll, "This will delete everything from the StreamMoments table.");
             this.btnDeleteAll.UseVisualStyleBackColor = true;
             this.btnDeleteAll.Click += new System.EventHandler(this.btnDeleteAll_Click);
             // 
@@ -161,14 +161,14 @@
             // toolStripStatusLabel1
             // 
             this.toolStripStatusLabel1.Name = "toolStripStatusLabel1";
-            this.toolStripStatusLabel1.Size = new System.Drawing.Size(48, 17);
-            this.toolStripStatusLabel1.Text = "Brief ID:";
+            this.toolStripStatusLabel1.Size = new System.Drawing.Size(107, 17);
+            this.toolStripStatusLabel1.Text = "StreamMoment ID:";
             // 
             // toolStripStatusLabelLastBrfID
             // 
             this.toolStripStatusLabelLastBrfID.AutoSize = false;
             this.toolStripStatusLabelLastBrfID.Name = "toolStripStatusLabelLastBrfID";
-            this.toolStripStatusLabelLastBrfID.Size = new System.Drawing.Size(150, 17);
+            this.toolStripStatusLabelLastBrfID.Size = new System.Drawing.Size(180, 17);
             this.toolStripStatusLabelLastBrfID.Text = "---";
             this.toolStripStatusLabelLastBrfID.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 

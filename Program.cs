@@ -2,7 +2,7 @@
 // This projected is licensed under the terms of the MIT license.
 // NO WARRANTY. THE SOFTWARE IS PROVIDED TO YOU “AS IS” AND “WITH ALL FAULTS.”
 // ANY USE OF THE SOFTWARE IS ENTIRELY AT YOUR OWN RISK.
-// Copyright (c) 2003 - 2016 Ryan S. White
+// Copyright (c) 2011 - 2016 Ryan S. White
 
 using System;
 using System.Linq;

@@ -2,7 +2,7 @@
 // This projected is licensed under the terms of the MIT license.
 // NO WARRANTY. THE SOFTWARE IS PROVIDED TO YOU “AS IS” AND “WITH ALL FAULTS.”
 // ANY USE OF THE SOFTWARE IS ENTIRELY AT YOUR OWN RISK.
-// Copyright (c) 2003 - 2016 Ryan S. White
+// Copyright (c) 2011 - 2016 Ryan S. White
 
 using System;
 using System.Collections.Generic;
@@ -134,32 +134,43 @@ namespace Capture
             briefMakerClient = new BriefMakerServiceReference.BriefMakerClient();
 
             /////////// Download Symbols ///////////
-            logger.Debug("Downloading symbols");
-            var dbSymbols = from s in dc.Symbols select s;
-
-            foreach (var s in dbSymbols)
+            try
             {
-                if (String.IsNullOrWhiteSpace(s.Name))
-                {
-                    logger.Error("SymbolID:" + s.SymbolID + " does not have a name(symbol). Item will be skipped.");
-                    continue;
-                }
-                if (s.SymbolID > 255 || s.SymbolID < 0)
-                {
-                    logger.Error("SymbolID:" + s.SymbolID + " range is not valid. Supported(0-255). Item will be skipped.");
-                    continue;
-                }
+                logger.Debug("Downloading symbols");
+                var dbSymbols = from s in dc.Symbols select s;
 
-                SecurityType secType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index;
-                string market = s.Market.Trim(); 
+                foreach (var s in dbSymbols)
+                {
+                    if (String.IsNullOrWhiteSpace(s.Name))
+                    {
+                        logger.Error("SymbolID:" + s.SymbolID + " does not have a name(symbol). Item will be skipped.");
+                        continue;
+                    }
+                    if (s.SymbolID > 255 || s.SymbolID < 0)
+                    {
+                        logger.Error("SymbolID:" + s.SymbolID + " range is not valid. Supported(0-255). Item will be skipped.");
+                        continue;
+                    }
 
-                var new_symb = new MarketSymbol() {
-                    SymbolID = s.SymbolID,
-                    Symbol = s.Name.Trim(),
-                    securityType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index,
-                    Market = s.Market
-                };
-                symbols.Add(new_symb);
+                    SecurityType secType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index;
+                    string market = s.Market.Trim();
+
+                    var new_symb = new MarketSymbol()
+                    {
+                        SymbolID = s.SymbolID,
+                        Symbol = s.Name.Trim(),
+                        securityType = s.Type.Trim() == "STK" ? SecurityType.Stock : SecurityType.Index,
+                        Market = s.Market
+                    };
+                    symbols.Add(new_symb);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error("Database Exception: " + ex.Message);
+                logger.Error("Make sure that the connection string is set correctly in app.config.");
+                Thread.Sleep(5000);
+                ShutdownRecorder();
             }
 
 
@@ -206,7 +217,7 @@ namespace Capture
         }
 
 
-        private void ConnectToIB() 
+        private void ConnectToIB()
         {
             DisposeIBClient();
 
@@ -236,7 +247,8 @@ namespace Capture
                 try
                 {
                     //int clientID = (new Random()).Next(0, 2000);
-                    logger.Info("Connecting to TWS Interactive brokers on port 7496..."+"(Try " + (4-retryCt) + " of 5)" );
+                    logger.Info("Connecting to TWS Interactive brokers with host "+ settings.IBHostToConnectTo 
+                        + " on port " + settings.IBPortToConnectTo + "..." +"(Try " + (4-retryCt) + " of 5)" );
                     client.Connect(settings.IBHostToConnectTo, settings.IBPortToConnectTo, 1);
                     logger.Info("Connection initiated, requesting data");
                     Thread.Sleep(2000);
@@ -260,7 +272,7 @@ namespace Capture
             client.TickPrice += client_TickPrice;
             client.TickSize += client_TickSize;
             client.Error += client_Error;
-            
+
             //client.UpdateMarketDepth += new EventHandler<UpdateMarketDepthEventArgs>(client_UpdateMarketDepth);
             //client.UpdateMarketDepthL2 += new EventHandler<UpdateMarketDepthL2EventArgs>(client_UpdateMarketDepthL2);
             //// client.TickString += new EventHandler<TickStringEventArgs>(client_TickString); // nothing of value that I see
@@ -268,6 +280,7 @@ namespace Capture
             //client.TickEfp += new EventHandler<TickEfpEventArgs>(client_TickEfp);
             //client.FundamentalData += new EventHandler<FundamentalDetailsEventArgs>(client_FundamentalData);
             //client.ContractDetails += new EventHandler<ContractDetailsEventArgs>(client_ContractDetails);
+            //client.RequestNewsBulletins(false);
 
             /////////// Register the list of symbols for TWS ///////////
             string listToEcho = "";
@@ -280,12 +293,11 @@ namespace Capture
 
                 // Examples..
                 //axTws1.reqMktData(curID++, symbols[s], "STK", "", 0, "", "", "SMART", "ISLAND", "USD", "", 0);
-                //client.RequestMarketDepth(s, item, 10);
-                //client.RequestContractDetails(s, item);
-                //client.RequestFundamentalData(s, item, "Estimates");
-                //client.RequestFundamentalData(s, item, "Financial Statements");
-                //client.RequestFundamentalData(s, item, "Summary");
-                //client.RequestNewsBulletins(false);
+                //client.RequestMarketDepth(symbol.SymbolID, item, 10);
+                //client.RequestContractDetails(symbol.SymbolID, item);
+                //client.RequestFundamentalData(symbol.SymbolID, item, "Estimates");
+                //client.RequestFundamentalData(symbol.SymbolID, item, "Financial Statements");
+                //client.RequestFundamentalData(symbol.SymbolID, item, "Summary");
 
                 listToEcho += ", " + name;
             }
@@ -303,11 +315,11 @@ namespace Capture
         {
             //Console.WriteLine("Price: " + e.Price + " Tick Type: " + EnumDescConverter.GetEnumDescription(e.TickType));
             DateTime now = DateTime.Now;
-            int millisecond = (int)(now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
+            int secondFraction = (int)(now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
 
             lock (capturingWriterLock)
             {
-                capturingWriter.Write((byte)millisecond); // record sub-second time (1/256th resolution)
+                capturingWriter.Write((byte)secondFraction); // record sub-second time (1/256th resolution)
                 capturingWriter.Write((byte)e.TickType);  // kind of data (like bid, ask, last...)
                 capturingWriter.Write((byte)e.TickerId);  // The Symbol ID (like AMD, INTC, INDU..)
                 capturingWriter.Write((float)e.Price);    // The data - in this case price.
@@ -321,11 +333,11 @@ namespace Capture
         void client_TickSize(object sender, TickSizeEventArgs e)
         {
             //Console.WriteLine("Tick Size: " + e.Size + " Tick Type: " + EnumDescConverter.GetEnumDescription(e.TickType));
-            int millisecond = (int)(DateTime.Now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
+            int secondFraction = (int)(DateTime.Now.Ticks % TimeSpan.TicksPerSecond / (TimeSpan.TicksPerSecond / 256));
 
             lock (capturingWriterLock)
             {
-                capturingWriter.Write((byte)millisecond);
+                capturingWriter.Write((byte)secondFraction);
                 capturingWriter.Write((byte)e.TickType);
                 capturingWriter.Write((byte)e.TickerId);
                 capturingWriter.Write((float)e.Size);
@@ -393,7 +405,6 @@ namespace Capture
         //////////////////////////////////////////////////////////////////////
         ////////////////////  One Second Snapshot stuff //////////////////////
         //////////////////////////////////////////////////////////////////////
-
         void timer1Sec_Tick(object sender, EventArgs e)
         {
             DateTime time = DateTime.Now; //issue here - thread does not start until last one finishes
@@ -474,11 +485,11 @@ namespace Capture
 
         void submitBrfToDB(DateTime roundedTime, byte[] data)
         {
-            StreamMoment briefToSave = new StreamMoment() { SnapshotTime = roundedTime, Data = data };
+            StreamMoment streamMomentToSave = new StreamMoment() { SnapshotTime = roundedTime, Data = data };
             bool submitSuccess = false;
             try
             {
-                dc.StreamMoments.InsertOnSubmit(briefToSave);
+                dc.StreamMoments.InsertOnSubmit(streamMomentToSave);
                 dc.SubmitChanges();
                 submitSuccess = true;
             }
@@ -495,7 +506,7 @@ namespace Capture
                 {
                     dc.Connection.Close();
                     dc = new DataClasses1DataContext();
-                    dc.StreamMoments.InsertOnSubmit(briefToSave);
+                    dc.StreamMoments.InsertOnSubmit(streamMomentToSave);
                     dc.SubmitChanges();
                     logger.Info("SubmitChanges() okay on second try.");
                 }
